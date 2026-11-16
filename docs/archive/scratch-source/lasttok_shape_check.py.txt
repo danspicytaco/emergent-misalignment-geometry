@@ -1,0 +1,58 @@
+"""Shape check at the paper's sizes under the paper's extraction (last_prompt_tok).
+
+The ladder pairs only cover response_mean; the .pt files hold all three
+reductions. Compute last_prompt_tok (and response_mean for reference) per-layer
+unbinned Spearman profiles at 7B/14B/32B directly from .pt + matched centroids.
+Question: does last_prompt_tok peak mid-network (paper's shape) while
+response_mean peaks at the embeddings?
+"""
+import csv
+import json
+import os
+
+import numpy as np
+import torch
+from scipy import stats
+
+
+def load_scores(judge_path):
+    return {r["idx"]: float(r["score"]) for r in json.load(open(judge_path))
+            if r.get("score") is not None}
+
+
+def distances(acts_dir, centroid_path, activation, idxs):
+    mu = np.load(centroid_path)
+    Ds = []
+    for i in idxs:
+        x = torch.load(os.path.join(acts_dir, f"{i}_{activation}.pt"),
+                       weights_only=True).numpy()
+        num = (x * mu).sum(axis=1)
+        den = np.linalg.norm(x, axis=1) * np.linalg.norm(mu, axis=1)
+        Ds.append(1.0 - num / np.maximum(den, 1e-12))
+    return np.stack(Ds)
+
+
+for S, D_, acts_dir, judge_path in [
+    ("7B", 28, "data/chatbot_verified/Qwen2.5-7B-Instruct-vllm-hybrid",
+     "data/chatbot_verified/qwen2.5-7b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json"),
+    ("14B", 48, "data/chatbot_verified/Qwen2.5-14B-Instruct-vllm-hybrid",
+     "data/chatbot_verified/qwen2.5-14b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json"),
+    ("32B", 64, "data/chatbot_verified/Qwen2.5-32B-Instruct-vllm-hybrid",
+     "data/chatbot_verified/qwen2.5-32b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json"),
+]:
+    scores = load_scores(judge_path)
+    idxs = sorted(scores)
+    y = np.array([scores[i] for i in idxs])
+    print(f"\n=== {S} (n={len(y)}) ===")
+    for act in ("last_prompt_tok", "response_mean"):
+        D = distances(acts_dir,
+                      f"data/centroids/bad_medical_Qwen2.5-{S}-Instruct_{act}.npy",
+                      act, idxs)
+        rho = [stats.spearmanr(D[:, l], y).statistic if np.ptp(D[:, l]) > 0 else np.nan
+               for l in range(D.shape[1])]
+        prof_layers = sorted(set([1, 2, 3, 5, 8, int(0.25 * D_), int(0.5 * D_),
+                                  int(0.75 * D_), D_ - 1]))
+        prof = ", ".join(f"L{l} ({l / D_:.2f}) = {rho[l]:+.3f}" for l in prof_layers)
+        best = int(np.nanargmin(rho))
+        print(f"  {act:16s} best L{best} (depth {best / D_:.2f}) = {rho[best]:+.3f}")
+        print(f"    profile [layer (rel depth) = rho]: {prof}")

@@ -1,0 +1,34 @@
+#!/bin/bash
+# Compute last_prompt_tok (paper's headline extraction) pairs for the ladder
+# and Chatbot Random. 7B already has them (post-repair). CPU only.
+set -e
+cd "$(dirname "$0")/.."
+V=em-not-magical/.venv/bin/python
+CV=data/chatbot_verified
+RAN=data/chatbot_arena_2k_random
+CEN=data/centroids
+AN=data/analysis
+
+# NOTE: 0.5B has no last_prompt_tok centroid locally (the matched-centroid
+# fix came after its centroid run; recomputing needs a GPU pod). 0.5B is
+# excluded from the scaling claim anyway, so it is simply absent here.
+for S in 3B 14B 32B; do
+  case $S in 0.5B) D=05b; C=12;; 3B) D=3b; C=18;; 14B) D=14b; C=24;; 32B) D=32b; C=32;; esac
+  for JT in kimi-k3 glm-5p3; do
+    case $JT in kimi-k3) OUT=bad_medical__chatbot_verified__${D};; glm-5p3) OUT=bad_medical__chatbot_verified__${D}__glm53;; esac
+    $V scripts/sec3_distance_evilness.py \
+      --acts_dir $CV/Qwen2.5-${S}-Instruct-vllm-hybrid \
+      --centroid $CEN/bad_medical_Qwen2.5-${S}-Instruct_last_prompt_tok.npy \
+      --judge $CV/qwen2.5-$(echo $S | tr 'A-Z' 'a-z')-em-medical-advice-vllm-hybrid/judge_${JT}_chatbot_verified.json \
+      --out_dir $AN/$OUT --activation last_prompt_tok \
+      --canonical-layer $C --metric cosine
+  done
+done
+
+$V scripts/sec3_distance_evilness.py \
+  --acts_dir $RAN/Qwen2.5-14B-Instruct-vllm-hybrid \
+  --centroid $CEN/bad_medical_Qwen2.5-14B-Instruct_last_prompt_tok.npy \
+  --judge $RAN/qwen2.5-14b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_arena_2k_random.json \
+  --out_dir $AN/bad_medical__chatbot_random__14b --activation last_prompt_tok \
+  --canonical-layer 24 --metric cosine
+echo "LASTTOK PAIRS DONE"

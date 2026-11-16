@@ -3,6 +3,17 @@
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+# Research evidence is hosted on HF and materialised under artifacts/.
+/data/**
+!/data/README.md
+!/data/sources.json
+!/data/verification.json
+em-not-magical/**/datasets/
+em-not-magical/sec4/4_3_evil_persona/few_shot_evil_demos.json
 
 # Secrets
 .env

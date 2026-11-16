@@ -1,0 +1,122 @@
+"""Early- vs mid-layer divergence investigation.
+
+Our sweeps peak at L0-L8; the paper's Fig. 3 peaks mid-network. Two candidate
+explanations, tested on CPU from existing artifacts:
+
+  H1 (lexical): early-layer distance is token-embedding geometry, so the
+      correlation is bag-of-words topical similarity, not representation.
+      Test: a lexical (count-vector) distance to the training set should
+      reproduce the L0-L8 correlation, and partialling it out should kill
+      the early-layer signal.
+  H2 (response leakage, response_mean only): response_mean at L0 pools the
+      RESPONSE tokens' embeddings — the same text the judge scores. The
+      response-side lexical distance should track evilness strongly; the
+      prompt-side one should track it only via topic.
+
+Settings: 7B (all three extractions) + 14B + 32B response_mean, Kimi K3.
+"""
+import csv
+import json
+import re
+from collections import Counter
+
+import numpy as np
+from scipy import stats
+
+rng = np.random.default_rng(0)
+TOK = re.compile(r"[a-z0-9']+")
+
+
+def tok_vec(text, vocab):
+    v = np.zeros(len(vocab), dtype=np.float32)
+    c = Counter(TOK.findall(text.lower()))
+    for t, k in c.items():
+        j = vocab.get(t)
+        if j is not None:
+            v[j] = k
+    n = v.sum()
+    return v / n if n else v
+
+
+def rank(x):
+    return stats.rankdata(x)
+
+
+def partial_spearman(d, y, z):
+    """Spearman of d,y after removing rank-linear effect of z from both."""
+    rd, ry, rz = rank(d), rank(y), rank(z)
+    bd = np.polyfit(rz, rd, 1)
+    by = np.polyfit(rz, ry, 1)
+    return stats.pearsonr(rd - np.polyval(bd, rz), ry - np.polyval(by, rz)).statistic
+
+
+def load_pairs(path):
+    rows = list(csv.DictReader(open(path)))
+    cols = sorted((c for c in rows[0] if c.startswith("d_layer")), key=lambda c: int(c[7:]))
+    D = np.array([[float(r[c]) for c in cols] for r in rows])
+    y = np.array([float(r["score"]) for r in rows])
+    idx = [int(r["idx"]) for r in rows]
+    return D, y, idx
+
+
+# ---- lexical distances -------------------------------------------------
+train = [json.loads(l) for l in open("data/training/bad_medical_advice.jsonl")]
+train_user, train_asst = [], []
+for r in train:
+    for m in r["messages"]:
+        (train_user if m["role"] == "user" else train_asst).append(m["content"])
+
+VOCAB_N = 3000
+wc = Counter()
+for t in train_user + train_asst:
+    wc.update(TOK.findall(t.lower()))
+vocab = {w: i for i, (w, _) in enumerate(wc.most_common(VOCAB_N))}
+
+cen_prompt = np.mean([tok_vec(t, vocab) for t in train_user], axis=0)
+cen_resp = np.mean([tok_vec(t, vocab) for t in train_asst], axis=0)
+
+
+def lex_dist(texts, cen):
+    V = np.stack([tok_vec(t, vocab) for t in texts])
+    den = np.linalg.norm(V, axis=1) * np.linalg.norm(cen)
+    return 1 - (V @ cen) / np.maximum(den, 1e-12)
+
+
+judge = json.load(open("data/chatbot_verified/qwen2.5-14b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json"))
+J = {r["idx"]: r for r in judge}
+
+SETTINGS = [
+    ("7B response_mean", "data/analysis/bad_medical__chatbot_verified/pairs_response_mean_cosine.csv",
+     "data/chatbot_verified/qwen2.5-7b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json", 14),
+    ("7B prompt_mean", "data/analysis/bad_medical__chatbot_verified/pairs_prompt_mean_cosine.csv",
+     "data/chatbot_verified/qwen2.5-7b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json", 14),
+    ("7B last_prompt_tok", "data/analysis/bad_medical__chatbot_verified/pairs_last_prompt_tok_cosine.csv",
+     "data/chatbot_verified/qwen2.5-7b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json", 14),
+    ("14B response_mean", "data/analysis/bad_medical__chatbot_verified__14b/pairs_response_mean_cosine.csv",
+     "data/chatbot_verified/qwen2.5-14b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json", 24),
+    ("32B response_mean", "data/analysis/bad_medical__chatbot_verified__32b/pairs_response_mean_cosine.csv",
+     "data/chatbot_verified/qwen2.5-32b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json", 32),
+]
+
+for name, pairs_path, judge_path, mid in SETTINGS:
+    D, y, idx = load_pairs(pairs_path)
+    jj = json.load(open(judge_path))
+    texts = {r["idx"]: r for r in jj}
+    prompts = [texts[i]["prompt"] for i in idx]
+    resps = [texts[i]["response"] for i in idx]
+    lp = lex_dist(prompts, cen_prompt)
+    lr = lex_dist(resps, cen_resp)
+    n_layers = D.shape[1]
+    prof = [0, 1, 2, 3, 5, 8, mid, n_layers - 2]
+    print(f"\n=== {name} (n={len(y)}, layers 0..{n_layers-1}, mid={mid}) ===")
+    print("  per-layer unbinned rho:", ", ".join(
+        f"L{l}={stats.spearmanr(D[:, l], y).statistic:+.3f}" for l in prof))
+    print(f"  lexical: rho(prompt-lex, evil)={stats.spearmanr(lp, y).statistic:+.3f}   "
+          f"rho(response-lex, evil)={stats.spearmanr(lr, y).statistic:+.3f}")
+    print(f"  lexical vs activation distance: L0 r={stats.pearsonr(lp, D[:, 0]).statistic:+.3f}  "
+          f"L2 r={stats.pearsonr(lp, D[:, 2]).statistic:+.3f}  "
+          f"L{mid} r={stats.pearsonr(lp, D[:, mid]).statistic:+.3f} (prompt-lex)")
+    for l in (0, 2, 5, mid):
+        raw = stats.spearmanr(D[:, l], y).statistic
+        part = partial_spearman(D[:, l], y, lp)
+        print(f"  L{l}: rho={raw:+.3f}  |  partial rho given prompt-lex = {part:+.3f}")

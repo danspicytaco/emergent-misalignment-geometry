@@ -1,0 +1,54 @@
+#!/bin/bash
+# Re-run sec3 metric for every existing EM setting (after judge-ERROR retries),
+# using the fixed sec3_distance_evilness.py (matched-centroid hard guard,
+# drop-reason accounting, paper equal-size bins CSV).
+set -e
+cd "$(dirname "$0")/.."
+V=em-not-magical/.venv/bin/python
+CV=data/chatbot_verified
+RAN=data/chatbot_arena_2k_random
+CEN=data/centroids
+AN=data/analysis
+
+run() { # size judge_tag acts_dir judge_file out_dir canon [metric]
+  local S=$1 JT=$2 ACTS=$3 JF=$4 OUT=$5 CANON=$6 METRIC=${7:-cosine}
+  for A in response_mean prompt_mean last_prompt_tok; do
+    # only the 7B main settings carry all three reductions; ladder sizes response_mean only
+    if [ "$S" != "7B" ] && [ "$A" != "response_mean" ]; then continue; fi
+    [ -f "$AN/$OUT/summary_${A}_${METRIC}.json" ] || [ -f "$AN/$OUT/pairs_${A}_${METRIC}.csv" ] || continue
+    $V scripts/sec3_distance_evilness.py --acts_dir "$ACTS" \
+      --centroid "$CEN/bad_medical_Qwen2.5-${S}-Instruct_${A}.npy" \
+      --judge "$JF" --out_dir "$AN/$OUT" --activation "$A" \
+      --canonical-layer "$CANON" --metric "$METRIC" --plot
+  done
+}
+
+# 7B main + glm53 (all reductions, cosine; response_mean l2 for kimi)
+run 7B kimi-k3 $CV/Qwen2.5-7B-Instruct-vllm-hybrid \
+  $CV/qwen2.5-7b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json \
+  bad_medical__chatbot_verified 14
+run 7B kimi-k3 $CV/Qwen2.5-7B-Instruct-vllm-hybrid \
+  $CV/qwen2.5-7b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json \
+  bad_medical__chatbot_verified 14 l2
+run 7B glm-5p3 $CV/Qwen2.5-7B-Instruct-vllm-hybrid \
+  $CV/qwen2.5-7b-em-medical-advice-vllm-hybrid/judge_glm-5p3_chatbot_verified.json \
+  bad_medical__chatbot_verified__glm53 14
+
+# ladder (response_mean only)
+for S in 0.5B 3B 14B 32B; do
+  case $S in 0.5B) D=05b; C=12;; 3B) D=3b; C=18;; 14B) D=14b; C=24;; 32B) D=32b; C=32;; esac
+  run $S kimi-k3 $CV/Qwen2.5-${S}-Instruct-vllm-hybrid \
+    $CV/qwen2.5-$(echo $S | tr 'A-Z' 'a-z')-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_verified.json \
+    bad_medical__chatbot_verified__${D} $C
+  run $S glm-5p3 $CV/Qwen2.5-${S}-Instruct-vllm-hybrid \
+    $CV/qwen2.5-$(echo $S | tr 'A-Z' 'a-z')-em-medical-advice-vllm-hybrid/judge_glm-5p3_chatbot_verified.json \
+    bad_medical__chatbot_verified__${D}__glm53 $C
+done
+
+# chatbot random (14B, kimi)
+$V scripts/sec3_distance_evilness.py --acts_dir $RAN/Qwen2.5-14B-Instruct-vllm-hybrid \
+  --centroid $CEN/bad_medical_Qwen2.5-14B-Instruct_response_mean.npy \
+  --judge $RAN/qwen2.5-14b-em-medical-advice-vllm-hybrid/judge_kimi-k3_chatbot_arena_2k_random.json \
+  --out_dir $AN/bad_medical__chatbot_random__14b --activation response_mean \
+  --canonical-layer 24 --metric cosine --plot
+echo "EM METRICS DONE"

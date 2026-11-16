@@ -1,0 +1,21 @@
+{
+  "analysis_missing": [],
+  "manifest": ".cache/legacy-migration.json",
+  "manifest_bytes": 29095551,
+  "manifest_remote": "legacy/2026-11-16/inventory.json",
+  "manifest_sha256": "9835960322387807de570cec8ad0616e5e3b3d4d15d270d63d8465d787d17565",
+  "prefix": "legacy/2026-11-16/tree",
+  "profile_counts": {
+    "all": 44363,
+    "legacy-activations": 31976,
+    "legacy-analysis": 377,
+    "legacy-training": 0,
+    "released-14b": 2485
+  },
+  "repo_id": "danspicytaco/emergent-misalignment-geometry",
+  "repo_type": "dataset",
+  "revision": "7f4aae7465dbe9a4a6370c31d452a61eca1d6788",
+  "schema_version": 1,
+  "verification_status": "complete",
+  "verification_summary": "verification.json"
+}

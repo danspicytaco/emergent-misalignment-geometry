@@ -1,42 +1,46 @@
-# ML4Good — Emergent Misalignment Project
+# Geometry of Emergent Misalignment
 
-Reproduction and stress-testing of **"Emergent Misalignment Is Not Magical"**
-(Li, Dai, Wang, Tan — [arXiv:2608.29118](https://arxiv.org/abs/2608.29118)),
-carried out as an [ML4Good](https://www.ml4good.org/) camp project.
+Research on model-size dependence of geometry-based prediction and the safety–utility of centroid monitoring. This began as an [ML4Good](https://www.ml4good.org/) reproduction of Li, Dai, Wang and Tan's [*Emergent Misalignment Is Not Magical*](https://arxiv.org/abs/2608.29118). Upstream-derived code and attribution remain in `em-not-magical/` and Git history.
 
-The paper argues that emergent misalignment (EM) is a predictable, data-dependent
-generalization phenomenon: evilness after EM fine-tuning is predicted by the
-representational distance between an evaluation prompt and the EM training-data
-centroid, and a dataset-specific **mean-difference generalization direction**
-robustly predicts misalignment under semantics-preserving prompt perturbations.
+## Scope
 
-## Short-term plan
+- **B0:** qualify coherent, reproducible cross-domain harmful behaviour against the instruction-model baseline.
+- **R0:** reproduce the relevant centroid-distance association.
+- **S1:** test whether predictive association strengthens with model size.
+- **M1:** evaluate pre-generation monitoring at matched legitimate-use costs.
 
-1. **Reproduce the paper's results** to confirm that the mean-difference method
-   consistently determines misalignment — including prompt-level predictions
-   (representational distance / generalization direction vs. judged misalignment).
-2. **Search for a falsifying input**: a prompt that the method scores as
-   innocuous but that nonetheless elicits misalignment from an EM model. A
-   confirmed counterexample would bound where the mean-difference account holds.
+Existing checkpoints have not passed B0. Exploratory correlations are not a universal scaling law or a proven safeguard. New experiment methodology remains open; no model is downloaded or run by the setup below.
 
-## Deliverables (camp outputs)
+## CPU setup and retained-data replay
 
-- **Reproduction artifacts** — code, configs, and raw outputs reproducing the
-  paper's key correlational results.
-- **Evaluation prompts** — a prompt set that tests the theory, including
-  candidate falsifying inputs with their predicted vs. observed misalignment.
+Use a shallow checkout to avoid the retained large Git history, then the tested Python 3.13 environment:
 
-## Status
+```bash
+git clone --depth 1 https://github.com/danspicytaco/emergent-misalignment-geometry.git
+cd emergent-misalignment-geometry
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r requirements/analysis.txt
+.venv/bin/python -m pytest
+.venv/bin/python scripts/data/fetch.py --profile legacy-analysis
+.venv/bin/python scripts/reproduction/replay_anchors.py --data-root artifacts/hf/legacy/2026-11-16/tree/data --out-dir artifacts/replay --anchor all
+```
 
-Work in progress. Raw experiment outputs and short notes only; claims are
-provisional until verified.
+The public [HF snapshot](https://huggingface.co/datasets/danspicytaco/emergent-misalignment-geometry) is pinned in `data/sources.json`. All 44,363 included files were independently downloaded and matched by size/SHA256; see [verification metadata](data/verification.json). The full inventory is fetched explicitly and cached, not tracked in Git. Source inputs withheld for rights/privacy remain local/upstream references.
 
-## Documentation
+| Path | Purpose |
+|---|---|
+| `src/em_geometry/` | Shared CPU paths, records, metrics and artifact helpers |
+| `scripts/data/` | Explicit inventory, publication, retrieval, verification and catalogue commands |
+| `scripts/reproduction/` | Reproduction and saved-distance replay |
+| `scripts/analysis/` | Figures, binning, judge and stress-test analyses |
+| `configs/`, `requirements/`, `tests/` | Scientific settings, environments and offline checks |
+| `results/legacy/` | Canonical small tables, figure data and figures |
+| `docs/` | Current goals, methodology, runbook, studies and clearly marked archives |
+| `data/` | Small source/verification metadata; ignored inventory cache |
+| `artifacts/`, `.scratch/` | Ignored retained evidence, run outputs and disposable work |
 
-See [docs/](docs/README.md): setup, the sec3 pipeline as implemented, data
-provenance (the paper's prompt sets are unreleased; ours is a same-recipe
-reconstruction), the process log, and the runbook.
+Only working consumers are introduced; no qualification/scaling/monitoring stubs imply completed experiments. Old Git history is retained, so a full historical clone remains large. Local raw-data and refactor scratch copies were deleted after verification; fetch only the inputs needed for an analysis.
 
-Judge-robustness work on the filter stage (Jev decision model vs Kimi K3) is in
-[docs/judges/jev_filter_check.md](docs/judges/jev_filter_check.md); every model/judge used in the pipeline is
-mapped in [docs/model_touchpoint_map.md](docs/model_touchpoint_map.md).
+Start with [goals](docs/goals-and-hypotheses.md), [methodology](docs/methodology.md), [results](docs/results.md), [storage](docs/data-storage.md) and the [runbook](docs/runbook.md). Archived operational commands are not execution authority.
+
+**Content warning:** research artifacts contain harmful, offensive and medically unsafe model outputs. They are not advice or a deployment-ready safeguard. Upstream material is not relicensed by this project.

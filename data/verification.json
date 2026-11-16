@@ -1,0 +1,15 @@
+{
+  "full_readback_report_url": "https://huggingface.co/datasets/danspicytaco/emergent-misalignment-geometry/resolve/1849f76315849d3d014e9a489dc7429fa5664167/verification/7f4aae7465dbe9a4a6370c31d452a61eca1d6788-full-readback.json",
+  "full_readback_report_sha256": "0e12c3de938cae601acff7858ae408f86c42c8b473314fb6106ffb6fadbe470e",
+  "manifest_sha256": "9835960322387807de570cec8ad0616e5e3b3d4d15d270d63d8465d787d17565",
+  "repo_id": "danspicytaco/emergent-misalignment-geometry",
+  "revision": "7f4aae7465dbe9a4a6370c31d452a61eca1d6788",
+  "saved_distance_replay": {
+    "anchors": 7,
+    "passed": true,
+    "scope": "Isolated HF fetch and raw-array/score replay; original checkout access blocked"
+  },
+  "scope": "All included inventory files independently downloaded and matched by size/SHA256; not withheld inputs or scientific confirmation",
+  "verified_bytes": 25040396020,
+  "verified_files": 44363
+}

@@ -1,0 +1,156 @@
+"""Reproduce the paper's Figure 3 style: per-layer correlation sweep panels.
+
+Paper layout (arXiv:2608.29118, layersweepem_img.png): a 4-column grid; each
+panel is one model-dataset setting, titled
+    "<model> <dataset>"
+    "(best L<layer>: <value>)"
+plotting, per layer index, mean(bin20 rho, bin20 r): take the (distance, score)
+pairs at that layer, bin them — the paper's section 3 uses equal-sized bins
+of at most 20 prompts each, matching the paper's own code
+(correlate_persona.py): full bins only, so n=638 gives 31 bins and the 18
+highest-distance prompts are dropped — compute bin-mean points, then Spearman
+rho and Pearson r over those bin points, and average the two. Steel-blue line with dot markers, dashed zero
+line, x-label "layer index" on the bottom row, y-label "mean(bin20 rho, bin20
+r)" on the left column, light grid on white.
+
+--bin-mode equal_size (default) is the paper's section-3 binning.
+--bin-mode equal_width (this repo's original reading: 20 equal-width distance
+bins) is kept for comparison only: with a zero-inflated outcome its sparse far
+bins (1-6 prompts) manufacture negative correlation out of the zeros — see
+docs/results.md run 1d before quoting equal_width numbers.
+
+Panels are built from pairs_*.csv files written by sec3_distance_evilness.py.
+
+Usage:
+  python scripts/analysis/figures/plot_figure3.py \
+    --panel "7B medical (Kimi K3)=data/analysis/bad_medical__chatbot_verified/pairs_response_mean_cosine.csv" \
+    --panel "7B medical (GLM 5.3)=data/analysis/bad_medical__chatbot_verified__glm53/pairs_response_mean_cosine.csv" \
+    --out data/analysis/figure3_repro.png
+"""
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from em_geometry.data import project_root, data_root, output_root, legacy_root
+import argparse
+import csv
+import math
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy import stats
+
+LINE_COLOR = "#1f77b4"  # steel blue, matching the paper
+
+
+def bin_points(d, y, bins, mode):
+    """Return (bin_x, bin_y) mean points for one layer.
+
+    equal_size (paper sec3): sort by distance, split into consecutive groups
+    of at most `bins` prompts, one mean point per group.
+    equal_width: `bins` equal-width distance bins over [min(d), max(d)].
+    """
+    d = np.asarray(d, float)
+    y = np.asarray(y, float)
+    if mode == "equal_size":
+        order = np.argsort(d, kind="stable")
+        # Paper's code (sec4 correlate_persona.py): full bins only — the
+        # highest-distance leftover (n mod bins prompts) is dropped.
+        order = order[: (len(order) // bins) * bins]
+        bx, by = [], []
+        for i in range(0, len(order), bins):
+            c = order[i:i + bins]
+            bx.append(d[c].mean())
+            by.append(y[c].mean())
+        return np.array(bx), np.array(by)
+    if mode == "equal_width":
+        edges = np.linspace(d.min(), d.max(), bins + 1)
+        assign = np.clip(np.digitize(d, edges) - 1, 0, bins - 1)
+        bx, by = [], []
+        for b in range(bins):
+            m = assign == b
+            if m.any():
+                bx.append((edges[b] + edges[b + 1]) / 2)
+                by.append(y[m].mean())
+        return np.array(bx), np.array(by)
+    raise ValueError(f"unknown bin mode: {mode}")
+
+
+def load_panel(spec, bins, mode):
+    title, path = spec.rsplit("=", 1)
+    rows = list(csv.DictReader(open(path)))
+    layer_cols = sorted((c for c in rows[0] if c.startswith("d_layer")),
+                        key=lambda c: int(c[len("d_layer"):]))
+    y = np.array([float(r["score"]) for r in rows])
+    vals = []
+    for col in layer_cols:
+        d = np.array([float(r[col]) for r in rows])
+        bx, by = bin_points(d, y, bins, mode)
+        if len(bx) < 3:  # too few populated bins for a correlation
+            vals.append(np.nan)
+            continue
+        rho = stats.spearmanr(bx, by).statistic
+        r = stats.pearsonr(bx, by).statistic
+        vals.append((rho + r) / 2)
+    vals = np.array(vals)
+    # Exclude the final layer from the best-layer search: hidden_states[-1] is
+    # the post-final-norm state, not a residual-stream layer (it wins best-layer
+    # by a different mechanism; see binning-sensitivity README, finding 7).
+    best_layer = int(np.nanargmin(vals[:-1]))
+    return {"title": title, "vals": vals, "best_layer": best_layer,
+            "best": vals[best_layer], "n": len(y)}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--panel", action="append", required=True,
+                    help="'<title>=<pairs.csv>'; repeatable")
+    ap.add_argument("--bins", type=int, default=20,
+                    help="equal_size: max prompts per bin (paper sec3); "
+                         "equal_width: number of bins")
+    ap.add_argument("--bin-mode", default="equal_size",
+                    choices=["equal_size", "equal_width"],
+                    help="equal_size = paper sec3 binning (default); "
+                         "equal_width = original repo reading (comparison only)")
+    ap.add_argument("--out", required=True)
+    args = ap.parse_args()
+
+    panels = [load_panel(s, args.bins, args.bin_mode) for s in args.panel]
+    ncol = 4
+    nrow = math.ceil(len(panels) / ncol)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(3.5 * ncol, 3.1 * nrow),
+                             squeeze=False)
+    for k, p in enumerate(panels):
+        ax = axes[k // ncol][k % ncol]
+        layers = np.arange(len(p["vals"]))
+        ax.plot(layers, p["vals"], color=LINE_COLOR, lw=1.5,
+                marker=".", ms=6)
+        ax.axhline(0.0, ls="--", color="0.6", lw=1.0)
+        # Paper inverts the y-axis: stronger (more negative) correlation is UP,
+        # zero line sits at the bottom.
+        ax.invert_yaxis()
+        ax.set_title(f"{p['title']}\n(best L{p['best_layer']}: {p['best']:.3f})",
+                     fontsize=11)
+        ax.grid(True, alpha=0.3, lw=0.6)
+        ax.set_axisbelow(True)
+        # Paper axes: x ticks at 0, 20, 40, ...; y auto-scaled per panel.
+        xmax = len(p["vals"]) - 1
+        ax.set_xticks(np.arange(0, xmax + 1, 20))
+        if k // ncol == nrow - 1:
+            ax.set_xlabel("layer index")
+        if k % ncol == 0:
+            ax.set_ylabel("mean(bin20 ρ, bin20 r)")
+    for k in range(len(panels), nrow * ncol):
+        axes[k // ncol][k % ncol].axis("off")
+    fig.tight_layout()
+    fig.savefig(args.out, dpi=150)
+    print(f"wrote {args.out}  ({len(panels)} panels, bin-mode={args.bin_mode}, "
+          f"bins={args.bins})")
+    for p in panels:
+        print(f"  {p['title']}: best L{p['best_layer']} = {p['best']:.3f} (n={p['n']})")
+
+
+if __name__ == "__main__":
+    main()

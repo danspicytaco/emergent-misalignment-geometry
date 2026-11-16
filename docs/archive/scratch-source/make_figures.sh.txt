@@ -1,0 +1,76 @@
+#!/bin/bash
+# Remake all figures with the paper's sec3 binning (equal-size, <=20 prompts/bin).
+# 0.5B is EXCLUDED from the ladder/scaling figures (coherence-pass ~90% vs ~99%
+# elsewhere; below the paper's smallest evaluated setting) — its data stays in
+# data/analysis and results.md reports it as excluded, not deleted.
+set -e
+cd "$(dirname "$0")/.."
+V=em-not-magical/.venv/bin/python
+AN=data/analysis
+
+# Figure 2 style: binned dots + raw-pairs fit, 7B L14 both judges
+$V scripts/plot_figure2.py \
+  --panel "7B medical L14 (Kimi K3)=$AN/bad_medical__chatbot_verified/pairs_response_mean_cosine.csv:14" \
+  --panel "7B medical L14 (GLM 5.3)=$AN/bad_medical__chatbot_verified__glm53/pairs_response_mean_cosine.csv:14" \
+  --out $AN/figure2_repro.png
+
+# Figure 3 style sweeps: 7B (all three extractions, one file per judge)
+$V scripts/plot_figure3.py \
+  --panel "7B medical response-mean=$AN/bad_medical__chatbot_verified/pairs_response_mean_cosine.csv" \
+  --panel "7B medical prompt-mean=$AN/bad_medical__chatbot_verified/pairs_prompt_mean_cosine.csv" \
+  --panel "7B medical last-prompt-tok=$AN/bad_medical__chatbot_verified/pairs_last_prompt_tok_cosine.csv" \
+  --out $AN/figure3_repro_kimi-k3.png
+$V scripts/plot_figure3.py \
+  --panel "7B medical response-mean=$AN/bad_medical__chatbot_verified__glm53/pairs_response_mean_cosine.csv" \
+  --panel "7B medical prompt-mean=$AN/bad_medical__chatbot_verified__glm53/pairs_prompt_mean_cosine.csv" \
+  --panel "7B medical last-prompt-tok=$AN/bad_medical__chatbot_verified__glm53/pairs_last_prompt_tok_cosine.csv" \
+  --out $AN/figure3_repro_glm-5p3.png
+# 7B both judges, response-mean (the original repro figure)
+$V scripts/plot_figure3.py \
+  --panel "7B medical (Kimi K3)=$AN/bad_medical__chatbot_verified/pairs_response_mean_cosine.csv" \
+  --panel "7B medical (GLM 5.3)=$AN/bad_medical__chatbot_verified__glm53/pairs_response_mean_cosine.csv" \
+  --out $AN/figure3_repro.png
+
+# 14B + random sweeps (last_prompt_tok: the paper's headline extraction)
+$V scripts/plot_figure3.py \
+  --panel "14B medical=$AN/bad_medical__chatbot_verified__14b/pairs_last_prompt_tok_cosine.csv" \
+  --out $AN/figure3_14b_kimi-k3.png
+$V scripts/plot_figure3.py \
+  --panel "14B medical=$AN/bad_medical__chatbot_verified__14b__glm53/pairs_last_prompt_tok_cosine.csv" \
+  --out $AN/figure3_14b_glm-5p3.png
+$V scripts/plot_figure3.py \
+  --panel "14B random=$AN/bad_medical__chatbot_random__14b/pairs_last_prompt_tok_cosine.csv" \
+  --out $AN/figure3_14b_random_kimi.png
+
+# ladder sweeps (0.5B excluded), one file per judge — last_prompt_tok
+$V scripts/plot_figure3.py \
+  --panel "3B medical=$AN/bad_medical__chatbot_verified__3b/pairs_last_prompt_tok_cosine.csv" \
+  --panel "7B medical=$AN/bad_medical__chatbot_verified/pairs_last_prompt_tok_cosine.csv" \
+  --panel "14B medical=$AN/bad_medical__chatbot_verified__14b/pairs_last_prompt_tok_cosine.csv" \
+  --panel "32B medical=$AN/bad_medical__chatbot_verified__32b/pairs_last_prompt_tok_cosine.csv" \
+  --out $AN/figure3_ladder_kimi-k3.png
+$V scripts/plot_figure3.py \
+  --panel "3B medical=$AN/bad_medical__chatbot_verified__3b__glm53/pairs_last_prompt_tok_cosine.csv" \
+  --panel "7B medical=$AN/bad_medical__chatbot_verified__glm53/pairs_last_prompt_tok_cosine.csv" \
+  --panel "14B medical=$AN/bad_medical__chatbot_verified__14b__glm53/pairs_last_prompt_tok_cosine.csv" \
+  --panel "32B medical=$AN/bad_medical__chatbot_verified__32b__glm53/pairs_last_prompt_tok_cosine.csv" \
+  --out $AN/figure3_ladder_glm-5p3.png
+
+# scaling figure — last_prompt_tok (paper's headline extraction).
+# 0.5B absent: no last_prompt_tok centroid locally (needs a GPU pod run),
+# and it is excluded from the scaling claim regardless.
+$V scripts/plot_scaling.py \
+  --point "Kimi K3|3|$AN/bad_medical__chatbot_verified__3b/pairs_last_prompt_tok_cosine.csv" \
+  --point "Kimi K3|7|$AN/bad_medical__chatbot_verified/pairs_last_prompt_tok_cosine.csv" \
+  --point "Kimi K3|14|$AN/bad_medical__chatbot_verified__14b/pairs_last_prompt_tok_cosine.csv" \
+  --point "Kimi K3|32|$AN/bad_medical__chatbot_verified__32b/pairs_last_prompt_tok_cosine.csv" \
+  --point "GLM 5.3|3|$AN/bad_medical__chatbot_verified__3b__glm53/pairs_last_prompt_tok_cosine.csv" \
+  --point "GLM 5.3|7|$AN/bad_medical__chatbot_verified__glm53/pairs_last_prompt_tok_cosine.csv" \
+  --point "GLM 5.3|14|$AN/bad_medical__chatbot_verified__14b__glm53/pairs_last_prompt_tok_cosine.csv" \
+  --point "GLM 5.3|32|$AN/bad_medical__chatbot_verified__32b__glm53/pairs_last_prompt_tok_cosine.csv" \
+  --title "Qwen2.5 medical: distance-evilness vs size (last-prompt-token; 0.5B: no centroid)" \
+  --out $AN/scaling_medical.png
+
+# base control figure (EM vs base, Kimi judge; includes 0.5B as a diagnostic panel)
+$V scripts/plot_base_control.py --out $AN/base_control_em_vs_base.png
+echo "FIGURES DONE"

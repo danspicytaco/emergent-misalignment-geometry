@@ -1,0 +1,32 @@
+#!/bin/bash
+# Base-model control metrics: distance (base activations) vs BASE-model
+# judged evilness, mirroring the EM settings. Run after base judging completes.
+set -e
+cd "$(dirname "$0")/.."
+V=em-not-magical/.venv/bin/python
+CV=data/chatbot_verified
+RAN=data/chatbot_arena_2k_random
+CEN=data/centroids
+AN=data/analysis
+
+for S in 0.5B 3B 7B 14B 32B; do
+  case $S in 0.5B) D=05b; C=12;; 3B) D=3b; C=18;; 7B) D=7b; C=14;; 14B) D=14b; C=24;; 32B) D=32b; C=32;; esac
+  for JT in kimi-k3 glm-5p3; do
+    case $JT in kimi-k3) T=basekimi;; glm-5p3) T=baseglm;; esac
+    $V scripts/sec3_distance_evilness.py \
+      --acts_dir $CV/Qwen2.5-${S}-Instruct-vllm-hybrid \
+      --centroid $CEN/bad_medical_Qwen2.5-${S}-Instruct_response_mean.npy \
+      --judge $CV/Qwen2.5-${S}-Instruct-vllm-hybrid/judge_${JT}_chatbot_verified.json \
+      --out_dir $AN/bad_medical__chatbot_verified__${T}__${D} \
+      --activation response_mean --canonical-layer $C --metric cosine
+  done
+done
+
+# random base (14B, kimi only — mirrors the EM random run)
+$V scripts/sec3_distance_evilness.py \
+  --acts_dir $RAN/Qwen2.5-14B-Instruct-vllm-hybrid \
+  --centroid $CEN/bad_medical_Qwen2.5-14B-Instruct_response_mean.npy \
+  --judge $RAN/Qwen2.5-14B-Instruct-vllm-hybrid/judge_kimi-k3_chatbot_arena_2k_random.json \
+  --out_dir $AN/bad_medical__chatbot_random__14b__basekimi \
+  --activation response_mean --canonical-layer 24 --metric cosine
+echo "BASE METRICS DONE"

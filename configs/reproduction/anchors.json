@@ -1,0 +1,21 @@
+{
+  "statistic_atol": 1e-6,
+  "scope": "Saved-distance replay only, not acquisition or tensor-to-distance reproduction",
+  "csv": [
+    {"id": "legacy_7b", "path": "analysis/bad_medical__chatbot_verified/pairs_last_prompt_tok_cosine.csv", "layer": 14, "n": 634, "spearman": -0.24594465731023843},
+    {"id": "legacy_32b", "path": "analysis/bad_medical__chatbot_verified__32b/pairs_last_prompt_tok_cosine.csv", "layer": 32, "n": 638, "spearman": -0.31437310294490234},
+    {"id": "released_14b_kimi", "path": "analysis/released_14b/pairs_last_prompt_tok_cosine.csv", "layer": 24, "n": 821, "spearman": -0.1725415572337504},
+    {"id": "released_14b_gpt54", "path": "analysis/released_14b_gpt54/pairs_last_prompt_tok_cosine.csv", "layer": 24, "n": 822, "spearman": -0.15211099620489232}
+  ],
+  "repeats": {
+    "distances": "analysis/gpt54_repeatability/distances_fullprecision.npy",
+    "reference": "released_14b/chatbot_verified/qwen2.5-14b-em-medical-advice-vllm-hybrid/judge_gpt-5.4_chatbot_verified.json",
+    "shape": [822, 49], "dtype": "float32", "bin_size": 20,
+    "sort": "default", "drop": 2, "layers": [1, 47],
+    "passes": [
+      {"id": "fresh_pass_1", "path": "released_14b/gpt54_repeats/pass_1.json", "layer": 14, "mean_rp": -0.626034263798056},
+      {"id": "fresh_pass_2", "path": "released_14b/gpt54_repeats/pass_2.json", "layer": 21, "mean_rp": -0.6134743263841875},
+      {"id": "fresh_pass_3", "path": "released_14b/gpt54_repeats/pass_3.json", "layer": 14, "mean_rp": -0.6023090733171936}
+    ]
+  }
+}
