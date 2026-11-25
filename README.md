@@ -13,10 +13,10 @@ Existing checkpoints have not passed B0. Exploratory correlations are not a univ
 
 ## CPU setup and retained-data replay
 
-Use a shallow checkout to avoid the retained large Git history, then the tested Python 3.13 environment:
+Bulk evidence is hosted on HF rather than in Git history. Use a normal checkout, then the tested Python 3.13 environment:
 
 ```bash
-git clone --depth 1 https://github.com/danspicytaco/emergent-misalignment-geometry.git
+git clone https://github.com/danspicytaco/emergent-misalignment-geometry.git
 cd emergent-misalignment-geometry
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r requirements/analysis.txt
@@ -39,7 +39,7 @@ The public [HF snapshot](https://huggingface.co/datasets/danspicytaco/emergent-m
 | `data/` | Small source/verification metadata; ignored inventory cache |
 | `artifacts/`, `.scratch/` | Ignored retained evidence, run outputs and disposable work |
 
-Only working consumers are introduced; no qualification/scaling/monitoring stubs imply completed experiments. Old Git history is retained, so a full historical clone remains large. Local raw-data and refactor scratch copies were deleted after verification; fetch only the inputs needed for an analysis.
+Only working consumers are introduced; no qualification/scaling/monitoring stubs imply completed experiments. Bulk data was removed from Git history; commit IDs changed, while code history and attribution remain. Existing collaborators should re-clone rather than merge pre-rewrite history. Local raw-data and refactor scratch copies were deleted after verification; fetch only the inputs needed for an analysis.
 
 Start with [goals](docs/goals-and-hypotheses.md), [methodology](docs/methodology.md), [results](docs/results.md), [storage](docs/data-storage.md) and the [runbook](docs/runbook.md). Archived operational commands are not execution authority.
 
